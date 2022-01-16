@@ -3,6 +3,7 @@
 import multiprocessing as mp
 import time
 
+
 class testProcess(mp.Process):
     def __init__(self, pId):
         mp.Process.__init__(self)
@@ -14,14 +15,33 @@ class testProcess(mp.Process):
             qLock.acquire()
             print("Process jobQueue", self.pId, id(jobQueue))
             if not jobQueue.empty():
-                job = jobQueue.get()
+                (job, d) = jobQueue.get()
                 qLock.release()
-                print("Process %d get job: %d" % (self.pId, job))
+                print("Process %d get job" % self.pId,)
+                for j in job:
+                    print(j)
+                    j.set_data("Process %d" % self.pId)
             else:
                 print("Process %d idle" % (self.pId))
                 qLock.release()
                 time.sleep(1)
         print("Process %d end" % self.pId)
+
+class testClass():
+    def __init__(self, name):
+        self.name = name
+        self.data = "xxxx"
+
+    def set_data(self, data):
+        self.data = data
+
+    def get_data(self):
+        return self.data
+
+class testSubClass(testClass):
+    def __init__(self, name):
+        testClass.__init__(self, name)
+        self.data = "yyyy"
 
 
 if __name__ == "__main__":
@@ -31,16 +51,24 @@ if __name__ == "__main__":
     qLock = mp.Lock()
     jobQueue = mp.Queue()
     print("main jobQueue", id(jobQueue))
-    for i in range(3):
+    for i in range(1):
         ps = testProcess(i)
         ps.start()
         processes.append(ps)
 
+    tObjs = []
+    for i in range(0, 20):
+        tObj = testSubClass("tObj" + str(i))
+        tObjs.append(tObj)
+
     qLock.acquire()
-    for j in range(0, 1000):
-        jobQueue.put(j+10000)
+    for i in range(1):
+        jobQueue.put((tObjs, i))
     qLock.release()
 
+    # It is not reliable for Qeueu.empty() to sync process/thread
+    # Sleep for a while for safty here
+    time.sleep(1)
     while not jobQueue.empty():
         print("JobQueue not empty")
         time.sleep(1)
@@ -51,5 +79,6 @@ if __name__ == "__main__":
     for ps in processes:
         ps.join()
 
-
+    for tObj in tObjs:
+        print("main data", tObj.get_data())
 

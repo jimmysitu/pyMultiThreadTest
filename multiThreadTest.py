@@ -39,6 +39,9 @@ if __name__ == "__main__":
         jobQueue.put(j+10000)
     qLock.release()
 
+    # It is not reliable for Qeueu.empty() to sync process/thread
+    # Sleep for a while for safty here
+    time.sleep(1)
     while not jobQueue.empty():
         pass
 
