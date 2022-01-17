@@ -12,16 +12,19 @@ class testProcess(mp.Process):
 
     def run(self):
         print("Process %d started" % self.pId)
-        while not exitFlag.value:
+        #while not (exitFlag.value and jobSentEvent.is_set()):
+        while not (exitFlag.value):
             qLock.acquire()
-            print("Process jobQueue", self.pId, id(jobQueue))
             if not jobQueue.empty():
                 (job, d) = jobQueue.get()
                 qLock.release()
                 print("Process %d get job" % self.pId,)
-                for j in job:
-                    print(j)
-                    j.set_data("Process %d" % self.pId)
+                rtn = testSubClass("rObj" + str(d))
+                rtn.set_data("%s, Process %d" % (rtn.get_data(), self.pId))
+                job.set_data("%s, Process %d" % (job.get_data(), self.pId))
+                # Assume process takes some time
+                #time.sleep(0.1)
+                rtnQueue.put(rtn)
             else:
                 print("Process %d idle" % (self.pId))
                 qLock.release()
@@ -31,7 +34,10 @@ class testProcess(mp.Process):
 class testClass():
     def __init__(self, name):
         self.name = name
-        self.data = "xxxx"
+        self.data = "base"
+
+    def get_name(self):
+        return self.name
 
     def set_data(self, data):
         self.data = data
@@ -42,47 +48,61 @@ class testClass():
 class testSubClass(testClass):
     def __init__(self, name):
         testClass.__init__(self, name)
-        self.data = "yyyy"
+        self.data = "sub"
 
+class testShareClass(testClass):
+    def __init__(self, name):
+        testClass.__init__(self, name)
+        self.data = "share"
 
 if __name__ == "__main__":
 
-    processes = []
     exitFlag = mp.Value('i', 0)
+    jobSentEvent = mp.Event()
     qLock = mp.Lock()
     jobQueue = mp.Queue()
-    print("main jobQueue", id(jobQueue))
-    for i in range(1):
+    rtnQueue = mp.Queue()
+
+    processes = []
+    for i in range(0):
         ps = testProcess(i)
         ps.start()
         processes.append(ps)
 
-    BaseManager.register('testSubClass', testSubClass)
+    BaseManager.register('testShareClass', testShareClass)
     mgr = BaseManager()
     mgr.start()
-    tObjs = []
-    for i in range(0, 20):
-        tObj = mgr.testSubClass("tObj" + str(i))
-        tObjs.append(tObj)
 
+    # In fact, mp.Queue is thread/process safe
     qLock.acquire()
-    for i in range(1):
-        jobQueue.put((tObjs, i))
+    tObjs = []
+    for i in range(0, 1000):
+        tObj = mgr.testShareClass("tObj" + str(i))
+        tObjs.append(tObj)
+        jobQueue.put((tObj, i))
     qLock.release()
+    print("All jobs are sent")
+    #jobSentEvent.set()
 
     # It is not reliable for Qeueu.empty() to sync process/thread
     # Sleep for a while for safty here
     time.sleep(1)
-    while not jobQueue.empty():
-        print("JobQueue not empty")
-        time.sleep(1)
-        pass
+#    while not jobQueue.empty():
+#        print("JobQueue not empty")
+#        time.sleep(1)
+
+#    while not rtnQueue.empty():
+#        rtn = rtnQueue.get()
+#        print("main:", rtn.get_name(), rtn.get_data())
 
     exitFlag.value = 1
+    rtnQueue.close()
 
     for ps in processes:
         ps.join()
+    print("All processes exit")
+
 
     for tObj in tObjs:
-        print("main data", tObj.get_data())
+        print("main:", tObj.get_name(), tObj.get_data())
 
