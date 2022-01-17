@@ -1,6 +1,7 @@
 #!/usr/bin/python3 -u
 
 import multiprocessing as mp
+from multiprocessing.managers import BaseManager
 import time
 
 
@@ -56,9 +57,12 @@ if __name__ == "__main__":
         ps.start()
         processes.append(ps)
 
+    BaseManager.register('testSubClass', testSubClass)
+    mgr = BaseManager()
+    mgr.start()
     tObjs = []
     for i in range(0, 20):
-        tObj = testSubClass("tObj" + str(i))
+        tObj = mgr.testSubClass("tObj" + str(i))
         tObjs.append(tObj)
 
     qLock.acquire()
